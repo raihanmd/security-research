@@ -47,14 +47,6 @@ Audits are collected from:
 - **Public Audits** - Publicly disclosed security reviews
 - **Private Audits** - Confidential engagement audits (with permission)
 
-## Contributing
-
-To add a new audit:
-
-1. Create a new folder with project name: `<project-name>/`
-2. Add `README.md` with project details
-3. Create `audit/` subfolder with `report.md` and `report.pdf`
-4. Update this README with the new entry
 
 ## Disclaimer
 
