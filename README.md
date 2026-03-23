@@ -20,9 +20,10 @@ This repository contains security audit reports for various blockchain protocols
 
 ## Audited Projects
 
-| Project                                 | Source    | Date       | Status  |
-| --------------------------------------- | --------- | ---------- | ------- |
-| [NFT Dealers](./2026-03-13_NFT-Dealer/) | CodeHawks | March 2026 | Audited |
+| Project                                        | Source    | Date       | Status  |
+| ---------------------------------------------- | --------- | ---------- | ------- |
+| [NFT Dealers](./2026-03-13_NFT-Dealer/)        | CodeHawks | March 2026 | Audited |
+| [FundMe v1.0](./2026-03-22_uncleBerry-FundMe/) | Private   | March 2026 | Audited |
 
 ## Audit Standards
 
@@ -46,7 +47,6 @@ Audits are collected from:
 - **CodeHawks** - Competitive audit contests
 - **Public Audits** - Publicly disclosed security reviews
 - **Private Audits** - Confidential engagement audits (with permission)
-
 
 ## Disclaimer
 
