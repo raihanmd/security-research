@@ -14,7 +14,6 @@ This repository contains security audit reports for various blockchain protocols
 └── <project-name>/
     ├── README.md          # Project details and protocol description
     └── audit/
-        ├── report.md       # Full audit report (markdown)
         └── report.pdf      # Full audit report (PDF)
 ```
 
@@ -25,6 +24,7 @@ This repository contains security audit reports for various blockchain protocols
 | [NFT Dealers](./2026-03-13_NFT-Dealer/)        | CodeHawks | March 2026 | Audited |
 | [FundMe v1.0](./2026-03-22_uncleBerry-FundMe/) | Private   | March 2026 | Audited |
 | [T Swap](./2026-03-29_T_Swap/)                 | Cyfrin    | March 2026 | Audited |
+| [ThunderLoan](./2026-04-18_ThunderLoan/)       | Cyfrin    | April 2026 | Audited |
 
 ## Audit Standards
 
@@ -38,7 +38,6 @@ Each audit entry includes:
   - Setup instructions
   - Known issues (if any)
 
-- **audit/report.md** - Detailed findings documented in markdown
 - **audit/report.pdf** - Formal PDF report
 
 ## Sources
