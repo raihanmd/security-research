@@ -25,6 +25,7 @@ This repository contains security audit reports for various blockchain protocols
 | [FundMe v1.0](./2026-03-22_uncleBerry-FundMe/) | Private   | March 2026 | Audited |
 | [T Swap](./2026-03-29_T_Swap/)                 | Cyfrin    | March 2026 | Audited |
 | [ThunderLoan](./2026-04-18_ThunderLoan/)       | Cyfrin    | April 2026 | Audited |
+| [SNARKeling](./2026-04-23_SNARKeling/)         | CodeHawks | April 2026 | Audited |
 
 ## Audit Standards
 
